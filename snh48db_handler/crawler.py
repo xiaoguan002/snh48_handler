@@ -42,6 +42,7 @@ def get_member_info(team_id):
         
         room_id = "-"
         member_id = "-"
+        group_id = "-"
 
         sid = row["sid"]
         gid = row["gid"]

@@ -99,10 +99,14 @@ class WeiboHandler:
                 bot.SendTo(bot.List('group', self.group_id)[0], message)
                 time.sleep(0.05)
 
-    def parse_watchMember_weibo(self, response, weibo_id):
+    def parse_watchMember_weibo(self, response, weibo_id, limit = 10):
         # DEBUG("Get Weibo:%s success"%weibo_id)
+        cnt = 1
         for i in response.json()['cards']:
             if i['card_type'] == 9:
+                if cnt > limit:
+                    break
+                cnt += 1
                 message = ''
                 id = i['mblog']['id']
                 created_at = i["mblog"]["created_at"]
@@ -113,6 +117,7 @@ class WeiboHandler:
                     continue
 
                 DEBUG("Weibo_id:%s %s有新微博了！"%(weibo_id, name))
+                message += "%s 有新微博了！\n"%name
                 if len(self.weibo_msg_queue[weibo_id]) > 1:
                     self.weibo_msg_queue[weibo_id].insert(0, id)
                     self.weibo_msg_queue[weibo_id].pop(-1)
