@@ -189,8 +189,8 @@ def get_member_weibo(bot):
     global weibo_handler
     DEBUG("Weibo check begin!")
     for weibo_id in weibo_handler.weibo_ids:
-        res = pocket48_handler.get_member_weibo(weibo_id)
-        pocket48_handler.parse_watchMember_weibo(res, weibo_id)
+        res = weibo_handler.get_member_weibo(weibo_id)
+        weibo_handler.parse_watchMember_weibo(res, weibo_id)
     DEBUG("Weibo check finish!")
 
 
