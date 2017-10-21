@@ -31,7 +31,7 @@ GROUP_ID = config.get("qq_groups","group_id")
 
 ROOM_NAMES = ["冯思佳", "金锣赛", "孙语姗", "夏越"]   
 LIVE_NAMES = ["BEJ", "刘力菲", "杜秋霖", "卢静", "卢天惠"] 
-WEIBO_NAMES = ["SNH", "GNZ", "BEJ", "SHY"] 
+WEIBO_NAMES = ["SNH", "GNZ", "BEJ", "韩佳乐", "赵佳蕊"] 
 
 # ROOM_IDS = []
 # LIVE_IDS = []
@@ -184,7 +184,7 @@ def get_member_lives(bot):
     res = pocket48_handler.get_memberLive_msg(limit = 30)
     pocket48_handler.parse_watchMemberLive_msg(res)
 
-@qqbotsched(minute='*/2', second='50')
+@qqbotsched(minute='*/5', second='50')
 def get_member_weibo(bot):
     global weibo_handler
     DEBUG("Weibo check begin!")

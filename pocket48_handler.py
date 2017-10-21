@@ -230,12 +230,12 @@ class Pocket48Handler:
                     if member_id not in self.member_live_msg_ids:
                         DEBUG("%s开始直播！"%member_id)
                         message = '你关注的小偶像正在直播！\n\n'
-                        message += ('%s : %s\n %s\n\n'%(idol_name, subtitle, live_url))
+                        message += ('%s : %s\n %s'%(idol_name, subtitle, live_url))
                         bot.SendTo(bot.List('group', self.group_id)[0], message)
                         self.member_live_msg_ids.append(member_id)
                     elif by_hand:
                         message = '你关注的小偶像正在直播！\n\n'
-                        message += ('%s : %s\n %s\n\n'%(idol_name, subtitle, live_url))
+                        message += ('%s : %s\n %s'%(idol_name, subtitle, live_url))
                         bot.SendTo(bot.List('group', self.group_id)[0], message)
                     else:
                         DEBUG("%s在直播列表中！"%member_id)

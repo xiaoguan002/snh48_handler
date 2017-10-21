@@ -16,6 +16,7 @@ class WeiboHandler:
         self.group_id = group_id
         self.weibo_ids = weibo_ids
         self.weibo_msg_queue = defaultdict(list)
+        self.weibo_top_id = defaultdict(str)
         
         self.reqHeaders = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:54.0) Gecko/20100101 Firefox/54.0',
@@ -51,14 +52,23 @@ class WeiboHandler:
             DEBUG('Weibo login successful! UserId:' + json.loads(res.text)['data']['uid'])
 
     def init_msg_queue(self, limit = 10):
+        weibo_top_cnt = 0
         for weibo_id in self.weibo_ids:
+            is_top = 0
             res = self.get_member_weibo(weibo_id)
-            for i in res.json()['cards']:
-                if i['card_type'] == 9:
-                    id = i['mblog']['id']
-                    self.weibo_msg_queue[weibo_id].append(id)
-                time.sleep(0.01)
+            res = filter(lambda x : x["card_type"] == 9, res.json()["cards"])
+            for i in res:
+                id = i["mblog"]["id"]
+                self.weibo_msg_queue[weibo_id].append(id)
+                if "isTop" in i["mblog"].keys():
+                    is_top = 1
+                    self.weibo_top_id[weibo_id] = id
+            weibo_top_cnt += is_top
+            time.sleep(0.01)
+            DEBUG("init weibo_id:%s success! has weibo:%s \nids:%s"     \
+                    %(weibo_id, len(res), ' '.join(self.weibo_msg_queue[weibo_id])))
         DEBUG("Init weibo msg queue success.")
+        DEBUG("%s/%s 有置顶微博."%(weibo_top_cnt, len(self.weibo_ids)))
            
     def get_member_weibo(self, wb_uid):
         url = 'https://m.weibo.cn/api/container/getIndex?uid=%s&type=uid&value=%s' % (wb_uid, wb_uid)
@@ -74,66 +84,94 @@ class WeiboHandler:
         return r
 
     def parse_member_weibo(self, response, limit = 5):
-        cnt = 1
-        for i in response.json()['cards']:
-            if i['card_type'] == 9:
-                if cnt > limit:
-                    break
-                message = ''
-                cnt += 1
-                id = i['mblog']['id']
-                created_at = i["mblog"]["created_at"]
-                name = i["mblog"]["user"]["screen_name"]
-                text = re.compile(r'<[^>]+>', re.S).sub('', i["mblog"]["text"])
+        response = filter(lambda x : x["card_type"] == 9, response.json()["cards"])[:limit]
+        for i in response:
+            is_top = 0
+            message = ''
+            id = i["mblog"]["id"]
+            if "isTop" in i["mblog"].keys():
+                is_top = i["mblog"]["isTop"]
+            created_at = i["mblog"]["created_at"]
+            name = i["mblog"]["user"]["screen_name"]
+            text = re.compile(r'<[^>]+>', re.S).sub('', i["mblog"]["text"])
 
-                message += "【%s】 %s:\n%s\n"%(created_at, name, text)
+            is_top_str = "【置顶】" if is_top == 1 else ""
+            message += "%s【%s】\n%s: %s\n"%(is_top_str, created_at, name, text)
 
-                if "data-url" in i["mblog"]["text"]:
-                    video_url = re.compile(r'data-url="(.*?)"', re.I).search(text).groups()[0]
+            if "data-url" in i["mblog"]["text"]:
+                match = re.compile(r'data-url="(.*?)"', re.I).search(text)
+                if match:
+                    video_url = match.groups()[0]
                     message += "%s\n"%video_url
 
-                if "pics" in i["mblog"].keys():
-                    for pic in i["mblog"]["pics"]:
-                        message += "%s\n"%(pic["url"])
+            if "pics" in i["mblog"].keys():
+                for pic in i["mblog"]["pics"]:
+                    message += "%s\n"%(pic["url"])
 
-                bot.SendTo(bot.List('group', self.group_id)[0], message)
-                time.sleep(0.05)
+            bot.SendTo(bot.List('group', self.group_id)[0], message)
+            time.sleep(0.05)
 
-    def parse_watchMember_weibo(self, response, weibo_id, limit = 10):
-        # DEBUG("Get Weibo:%s success"%weibo_id)
-        cnt = 1
-        for i in response.json()['cards']:
-            if i['card_type'] == 9:
-                if cnt > limit:
-                    break
-                cnt += 1
-                message = ''
-                id = i['mblog']['id']
-                created_at = i["mblog"]["created_at"]
-                name = i["mblog"]["user"]["screen_name"]
-                text = re.compile(r'<[^>]+>', re.S).sub('', i["mblog"]["text"])
+    def parse_watchMember_weibo(self, response, weibo_id, limit = 5):
+        DEBUG("Get Weibo:%s success"%weibo_id)
+        response = filter(lambda x : x["card_type"] == 9, response.json()["cards"])[:limit]
+        response.reverse()
+        for i in response:
+            is_change_weibo = False
+            is_top = 0
+            message = ''
+            id = i["mblog"]["id"]
+            DEBUG("Get weibo_id:%s id:%s success!"%(weibo_id, id))
 
-                if id in self.weibo_msg_queue[weibo_id]:
-                    continue
+            if "isTop" in i["mblog"].keys():
+                is_top = i["mblog"]["isTop"]
+            created_at = i["mblog"]["created_at"]
+            name = i["mblog"]["user"]["screen_name"]
+            text = re.compile(r'<[^>]+>', re.S).sub('', i["mblog"]["text"])
 
-                DEBUG("Weibo_id:%s %s有新微博了！"%(weibo_id, name))
-                message += "%s 有新微博了！\n"%name
-                if len(self.weibo_msg_queue[weibo_id]) > 1:
-                    self.weibo_msg_queue[weibo_id].insert(0, id)
-                    self.weibo_msg_queue[weibo_id].pop(-1)
+            if self.weibo_top_id[weibo_id] and is_top == 1 \
+                    and self.weibo_top_id[weibo_id] != id:
+                DEBUG("%s, id:%s change top weibo from %s to %s" \
+                        %(name, weibo_id, self.weibo_top_id[weibo_id], id))
+                message += "%s 更换了置顶微博：\n"%name
+                self.weibo_msg_queue[weibo_id].remove(id)
+                self.weibo_msg_queue[weibo_id].insert(0, id)
+                is_change_weibo = True
 
-                message += "【%s】 %s:\n%s\n"%(created_at, name, text)
+            if id in self.weibo_msg_queue[weibo_id] and not is_change_weibo:
+                continue
 
-                if "data-url" in i["mblog"]["text"]:
-                    video_url = re.compile(r'data-url="(.*?)"', re.I).search(text).groups()[0]
+            DEBUG("Weibo_id:%s %s有新微博了！"%(weibo_id, name))
+            if not is_change_weibo:
+                is_top_str = "【置顶】" if is_top == 1 else ""
+                message += "%s 有新%s微博了！\n"%(name, is_top_str)
+
+            insert_index = None
+            if len(self.weibo_msg_queue[weibo_id]) > 1:
+                if is_top == 1 and not self.weibo_top_id[weibo_id]:
+                    insert_index = 0
+                    self.weibo_top_id[weibo_id] = id
+                elif is_top != 1 and not self.weibo_top_id[weibo_id]:
+                    insert_index = 0
+                elif self.weibo_top_id[weibo_id]:
+                    insert_index = 1
+
+                self.weibo_msg_queue[weibo_id].insert(insert_index, id)
+                self.weibo_msg_queue[weibo_id].pop(-1)
+
+            message += "【%s】 %s:\n%s\n"%(created_at, name, text)
+
+            if "data-url" in i["mblog"]["text"]:
+                match = re.compile(r'data-url="(.*?)"', re.I).search(text)
+                if match:
+                    video_url = match.groups()[0]
                     message += "%s\n"%video_url
 
-                if "pics" in i["mblog"].keys():
-                    for pic in i["mblog"]["pics"]:
-                        message += "%s\n"%(pic["url"])
+            if "pics" in i["mblog"].keys():
+                for pic in i["mblog"]["pics"]:
+                    message += "%s\n"%(pic["url"])
 
-                bot.SendTo(bot.List('group', self.group_id)[0], message)
-                time.sleep(0.05)
+            bot.SendTo(bot.List('group', self.group_id)[0], message)
+            time.sleep(0.01)
 
 
 if __name__ == "__main__":
